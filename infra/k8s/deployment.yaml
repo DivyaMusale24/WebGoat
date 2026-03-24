@@ -1,0 +1,44 @@
+# -------------------------------------------------------
+# INTENTIONALLY MISSING security hardening for demo
+# Trivy misconfig scan will flag missing securityContext,
+# resource limits, and readOnlyRootFilesystem
+# -------------------------------------------------------
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webgoat-deployment
+  labels:
+    app: webgoat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webgoat
+  template:
+    metadata:
+      labels:
+        app: webgoat
+    spec:
+      containers:
+      - name: webgoat
+        image: webgoat-app:latest
+        ports:
+        - containerPort: 8080
+        # MISSING securityContext → Trivy will flag KSV014, KSV020, KSV021
+        # MISSING resource limits → Trivy will flag KSV011
+        # MISSING readOnlyRootFilesystem → Trivy will flag KSV014
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webgoat-service
+spec:
+  selector:
+    app: webgoat
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: LoadBalancer
+  # MISSING: should be ClusterIP for internal-only access
