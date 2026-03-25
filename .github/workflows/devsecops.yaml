@@ -191,13 +191,16 @@ jobs:
           chmod a+w .
           touch zap.yaml
           chmod a+w zap.yaml
-          
+
       - name: Run ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: 'http://localhost:8080/WebGoat/'
           fail_action: false
           cmd_options: '-a'
+          issue_title: ZAP Scan Results
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload ZAP report
         uses: actions/upload-artifact@v4
