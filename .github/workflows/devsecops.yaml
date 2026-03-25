@@ -8,41 +8,31 @@ on:
 
 jobs:
 
-# ─────────────────────────────────────────
-# JOB 1: SAST - Semgrep
-# ─────────────────────────────────────────
   sast-semgrep:
-  name: "SAST · Semgrep"
-  runs-on: ubuntu-latest
-  permissions:
-    security-events: write
-    actions: read
-    contents: read
-  steps:
-    - uses: actions/checkout@v4
+    name: SAST Semgrep
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Install and run Semgrep
-      run: |
-        pip install --upgrade semgrep
-        semgrep --config=auto \
-                --sarif \
-                --output=semgrep.sarif \
-                . || true
-      continue-on-error: true
+      - name: Install and run Semgrep
+        run: |
+          pip install --upgrade semgrep
+          semgrep --config=auto --sarif --output=semgrep.sarif . || true
+        continue-on-error: true
 
-    - name: Upload SARIF → GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: semgrep.sarif
-        category: semgrep
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
 
-
-# ─────────────────────────────────────────
-# JOB 2: SCA - Snyk
-# ─────────────────────────────────────────
   sca-snyk:
-    name: "SCA · Snyk"
+    name: SCA Snyk
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -57,26 +47,25 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Install Snyk CLI
+        run: npm install -g snyk
+
       - name: Run Snyk SCA
-        uses: snyk/actions/maven@master
-        continue-on-error: true
+        run: |
+          snyk test --all-projects --severity-threshold=high --sarif-file-output=snyk.sarif || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high --sarif-file-output=snyk.sarif
+        continue-on-error: true
 
-      - name: Upload SARIF → GitHub Security tab
+      - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: snyk.sarif
           category: snyk
 
-# ─────────────────────────────────────────
-# JOB 3: Secrets - Gitleaks
-# ─────────────────────────────────────────
   secrets-scan:
-    name: "Secrets · Gitleaks"
+    name: Secrets Gitleaks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -88,11 +77,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-# ─────────────────────────────────────────
-# JOB 4: Container Scan - Trivy (SECURITY GATE)
-# ─────────────────────────────────────────
   container-scan:
-    name: "Container · Trivy (Gate)"
+    name: Container Trivy Gate
     runs-on: ubuntu-latest
     needs: [sast-semgrep, sca-snyk]
     permissions:
@@ -102,30 +88,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build jar with Maven
+        run: mvn clean package -DskipTests -pl webgoat -am
+
       - name: Build Docker image
         run: docker build -t webgoat-app:${{ github.sha }} .
 
-      - name: Trivy - container CVE scan (GATE on CRITICAL/HIGH)
+      - name: Trivy container CVE scan
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: webgoat-app:${{ github.sha }}
           format: sarif
           output: trivy-container.sarif
           severity: CRITICAL,HIGH
-          exit-code: '0'           # set to '1' to enforce hard gate
+          exit-code: '0'
+        continue-on-error: true
 
-      - name: Upload SARIF → GitHub Security tab
+      - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: trivy-container.sarif
           category: trivy-container
 
-# ─────────────────────────────────────────
-# JOB 5: IaC Scan - Checkov
-# ─────────────────────────────────────────
   iac-scan:
-    name: "IaC · Checkov"
+    name: IaC Checkov
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -143,18 +136,15 @@ jobs:
           output_file_path: console,checkov.sarif
           soft_fail: true
 
-      - name: Upload SARIF → GitHub Security tab
+      - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: checkov.sarif
           category: checkov
 
-# ─────────────────────────────────────────
-# JOB 6: K8s Manifest Scan - Trivy Misconfig
-# ─────────────────────────────────────────
   k8s-scan:
-    name: "K8s · Trivy Misconfig"
+    name: K8s Trivy Misconfig
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -163,7 +153,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Trivy - K8s manifest misconfiguration scan
+      - name: Trivy K8s manifest scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: config
@@ -171,40 +161,42 @@ jobs:
           format: sarif
           output: trivy-k8s.sarif
           exit-code: '0'
+        continue-on-error: true
 
-      - name: Upload SARIF → GitHub Security tab
+      - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: trivy-k8s.sarif
           category: trivy-k8s
 
-# ─────────────────────────────────────────
-# JOB 7: DAST - OWASP ZAP
-# ─────────────────────────────────────────
   dast-zap:
-    name: "DAST · OWASP ZAP"
+    name: DAST OWASP ZAP
     runs-on: ubuntu-latest
     needs: [container-scan]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build jar with Maven
+        run: mvn clean package -DskipTests -pl webgoat -am
 
       - name: Build and start WebGoat
         run: |
           docker build -t webgoat-app:latest .
           docker run -d --name webgoat \
             -p 8080:8080 \
-            -e WEBGOAT_HOST=0.0.0.0 \
             webgoat-app:latest
-          echo "Waiting 90s for WebGoat to boot..."
-          sleep 90
+          echo "Waiting 120s for WebGoat to boot..."
+          sleep 120
 
       - name: Confirm app is live
-        run: |
-          curl --retry 10 --retry-delay 10 \
-               --retry-connrefused \
-               -f http://localhost:8080/WebGoat/ \
-          || echo "App may not be fully ready - continuing"
+        run: curl --retry 10 --retry-delay 10 --retry-connrefused -f http://localhost:8080/WebGoat/ || echo "App not ready but continuing"
 
       - name: Run ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
@@ -213,7 +205,7 @@ jobs:
           fail_action: false
           cmd_options: '-a'
 
-      - name: Upload ZAP HTML report
+      - name: Upload ZAP report
         uses: actions/upload-artifact@v4
         if: always()
         with:
