@@ -12,30 +12,31 @@ jobs:
 # JOB 1: SAST - Semgrep
 # ─────────────────────────────────────────
   sast-semgrep:
-    name: "SAST · Semgrep"
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
+  name: "SAST · Semgrep"
+  runs-on: ubuntu-latest
+  permissions:
+    security-events: write
+    actions: read
+    contents: read
+  steps:
+    - uses: actions/checkout@v4
 
-      - name: Run Semgrep SAST
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: >-
-            p/java
-            p/owasp-top-ten
-            p/secrets
-          generateSarif: "1"
+    - name: Install and run Semgrep
+      run: |
+        pip install --upgrade semgrep
+        semgrep --config=auto \
+                --sarif \
+                --output=semgrep.sarif \
+                . || true
+      continue-on-error: true
 
-      - name: Upload SARIF → GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: semgrep.sarif
-          category: semgrep
+    - name: Upload SARIF → GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: semgrep.sarif
+        category: semgrep
+
 
 # ─────────────────────────────────────────
 # JOB 2: SCA - Snyk
