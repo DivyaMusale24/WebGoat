@@ -98,7 +98,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Build jar with Maven
-        run: mvn clean package -DskipTests -pl webgoat -am
+        run: mvn clean package -DskipTests
 
       - name: Build Docker image
         run: docker build -t webgoat-app:${{ github.sha }} .
@@ -187,7 +187,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Build jar with Maven
-        run: mvn clean package -DskipTests -pl webgoat -am
+        run: mvn clean package -DskipTests
 
       - name: Build and start WebGoat
         run: |
